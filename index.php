@@ -32,6 +32,7 @@ $result = $conn->query("SELECT * FROM tasks ORDER BY id DESC");
 </head>
 
 <body>
+    <!-- body -->
     <div class="container">
         <h1>Todo List</h1>
         <form action="index.php" method="post">
