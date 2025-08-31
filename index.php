@@ -1,24 +1,48 @@
 <?php
+// --- DATABASE CONNECTION ---
 $conn = new mysqli("localhost", "root", "", "todolist");
 if ($conn->connect_error) {
-    die("Connection Failed " . $conn->connect_error);
+    die("Connection Failed: " . $conn->connect_error);
 }
-if (isset($_POST["addtask"])) {
-    $task = $_POST["task"];
-    $conn->query("INSERT INTO tasks (task) VALUES ('$task')");
+
+// --- HANDLE ACTIONS ---
+
+// Add a new task
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task'])) {
+    $task_content = trim($_POST['task_content']);
+    if (!empty($task_content)) {
+        $stmt = $conn->prepare("INSERT INTO tasks (task) VALUES (?)");
+        $stmt->bind_param("s", $task_content);
+        $stmt->execute();
+        $stmt->close();
+    }
     header("Location: index.php");
+    exit;
 }
-if (isset($_GET["delete"])) {
-    $id = $_GET["delete"];
-    $conn->query("DELETE FROM tasks WHERE id = '$id'");
+
+// Toggle task status or delete
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['id'])) {
+    $task_id = (int)$_GET['id'];
+
+    if (isset($_GET['action']) && $_GET['action'] === 'toggle') {
+        $result = $conn->query("SELECT status FROM tasks WHERE id = $task_id");
+        if ($row = $result->fetch_assoc()) {
+            $new_status = ($row['status'] === 'pending') ? 'done' : 'pending';
+            $conn->query("UPDATE tasks SET status = '$new_status' WHERE id = $task_id");
+        }
+    }
+
+    if (isset($_GET['action']) && $_GET['action'] === 'delete') {
+        $conn->query("DELETE FROM tasks WHERE id = $task_id");
+    }
+
     header("Location: index.php");
+    exit;
 }
-if (isset($_GET["complete"])) {
-    $id = $_GET["complete"];
-    $conn->query("UPDATE tasks SET status ='completed' WHERE id = '$id'");
-    header("Location: index.php");
-}
-$result = $conn->query("SELECT * FROM tasks ORDER BY id DESC");
+
+// Fetch all tasks
+$result = $conn->query("SELECT * FROM tasks ORDER BY id ASC");
+$all_tasks = $result->fetch_all(MYSQLI_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -27,28 +51,37 @@ $result = $conn->query("SELECT * FROM tasks ORDER BY id DESC");
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Todo List</title>
+    <title>Tasks</title>
     <link rel="stylesheet" href="style.css">
+
+
 </head>
 
 <body>
     <div class="container">
-        <h1>Todo List</h1>
+        <h1>Tasks</h1>
         <form action="index.php" method="post">
-            <input type="text" name="task" placeholder="Enter new task:" id="">
-            <button type="submit" name="addtask">Add Task</button>
+            <input type="text" name="task_content" placeholder="Enter new task..." required>
+            <button type="submit" name="add_task">Add</button>
         </form>
-        <ul>
-            <?php while ($row = $result->fetch_assoc()): ?>
-                <li class="<?php echo $row["status"]; ?>">
-                    <strong><?php echo $row["task"]; ?></strong>
-                    <div class="actions">
-                        <a href="index.php?complete=<?php echo $row['id']; ?>">Complete</a>
-                        <a href="index.php?delete=<?php echo $row['id']; ?>">Delete</a>
+
+        <?php if (empty($all_tasks)): ?>
+            <p>No tasks yet! Add your first task above.</p>
+        <?php else: ?>
+            <?php foreach ($all_tasks as $task):
+                $id = $task['id'];
+                $content = htmlspecialchars($task['task']);
+                $done_class = ($task['status'] === 'done') ? 'done' : '';
+            ?>
+                <div class="task-item">
+                    <span class="task-content <?php echo $done_class; ?>"><?php echo $content; ?></span>
+                    <div class="task-actions">
+                        <a href="?action=toggle&id=<?php echo $id; ?>" class="btn-toggle">✓</a>
+                        <a href="?action=delete&id=<?php echo $id; ?>" class="btn-delete" onclick="return confirm('Delete this task?');">×</a>
                     </div>
-                </li>
-            <?php endwhile ?>
-        </ul>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
 </body>
 
